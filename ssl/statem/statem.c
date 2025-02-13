@@ -349,6 +349,16 @@ static info_cb get_callback(SSL_CONNECTION *s)
  *   1: Success
  * <=0: NBIO or error
  */
+/*
+ * 押さえておくべき状態変数(include/internal/statem.h)
+ *    MSG_FLOW_UNINITED:    ネゴシエーション中ではない
+ *    MSG_FLOW_ERROR:       エラー発生
+ *    MSG_FLOW_RENEGOTIATE: 再ネゴシエーション中
+ *    MSG_FLOW_READING:     ネゴシエーションパケット読み込み中
+ *    MSG_FLOW_WRITING:     ネゴシエーションパケット書き込み中
+ *    MSG_FLOW_FINISHED:    ネゴシエーション完了
+ *
+ */
 static int state_machine(SSL_CONNECTION *s, int server)
 {
     BUF_MEM *buf = NULL;
@@ -359,6 +369,7 @@ static int state_machine(SSL_CONNECTION *s, int server)
     SSL *ssl = SSL_CONNECTION_GET_SSL(s);
     SSL *ussl = SSL_CONNECTION_GET_USER_SSL(s);
 
+    // エラーが発生したらネゴシエーションをしない
     if (st->state == MSG_FLOW_ERROR) {
         /* Shouldn't have been called if we're already in the error state */
         return -1;
@@ -390,9 +401,12 @@ static int state_machine(SSL_CONNECTION *s, int server)
 #endif
 
     /* Initialise state machine */
-    if (st->state == MSG_FLOW_UNINITED
-            || st->state == MSG_FLOW_FINISHED) {
+    // ネゴシエーション中ではない、または、 ネゴシエーション完了
+    if (st->state == MSG_FLOW_UNINITED || st->state == MSG_FLOW_FINISHED) {
+
+        // ネゴシエーション中ではない場合
         if (st->state == MSG_FLOW_UNINITED) {
+            // TLS_ST_BEFOREは 「No handshake has been initiated yet」とのことでハンドシェイク未実施の特別な状態を表す
             st->hand_state = TLS_ST_BEFORE;
             st->request_state = TLS_ST_BEFORE;
         }
@@ -474,17 +488,30 @@ static int state_machine(SSL_CONNECTION *s, int server)
         init_write_state_machine(s);
     }
 
-    while (st->state != MSG_FLOW_FINISHED) {
-        if (st->state == MSG_FLOW_READING) {
+    while (st->state != MSG_FLOW_FINISHED) {  // ネゴシエーション完了になるまでIteration
+
+        if (st->state == MSG_FLOW_READING) {  // TLSメッセージ読み込み時において
+
+            // 読み込み用のステートマシンが呼ばれる
             ssret = read_state_machine(s);
-            if (ssret == SUB_STATE_FINISHED) {
+
+            // サブステートの状態が正常に完了したので、次の状態を設定する
+            if (ssret == SUB_STATE_FINISHED) { 
+
+                // TLSメッセージ書き込みの状態としてセット (MOVE1)
                 st->state = MSG_FLOW_WRITING;
+
+                // 書き込み用のステートマシンに移動するための初期化処理を行う
                 init_write_state_machine(s);
+
             } else {
                 /* NBIO or error */
                 goto end;
             }
-        } else if (st->state == MSG_FLOW_WRITING) {
+
+        } else if (st->state == MSG_FLOW_WRITING) {   // 書き込み状態 (MOVE1)
+
+            // 書き込み用のステートマシンを実行する
             ssret = write_state_machine(s);
             if (ssret == SUB_STATE_FINISHED) {
                 st->state = MSG_FLOW_READING;
@@ -641,6 +668,7 @@ static SUB_STATE_RETURN read_state_machine(SSL_CONNECTION *s)
              * Validate that we are allowed to move to the new state and move
              * to that state if so
              */
+            // コールバック関数の実行
             if (!transition(s, mt))
                 return SUB_STATE_ERROR;
 
@@ -747,12 +775,12 @@ static int statem_do_write(SSL_CONNECTION *s)
 {
     OSSL_STATEM *st = &s->statem;
 
-    if (st->hand_state == TLS_ST_CW_CHANGE
-        || st->hand_state == TLS_ST_SW_CHANGE) {
+    // CW(Client Write), SW(Server Write)なのでハンドシェイクステータスが
+    if (st->hand_state == TLS_ST_CW_CHANGE || st->hand_state == TLS_ST_SW_CHANGE) {
         if (SSL_CONNECTION_IS_DTLS(s))
-            return dtls1_do_write(s, SSL3_RT_CHANGE_CIPHER_SPEC);
+            return dtls1_do_write(s, SSL3_RT_CHANGE_CIPHER_SPEC);  // DTLSの場合
         else
-            return ssl3_do_write(s, SSL3_RT_CHANGE_CIPHER_SPEC);
+            return ssl3_do_write(s, SSL3_RT_CHANGE_CIPHER_SPEC);   // TLSの場合
     } else {
         return ssl_do_write(s);
     }
@@ -765,6 +793,7 @@ static void init_write_state_machine(SSL_CONNECTION *s)
 {
     OSSL_STATEM *st = &s->statem;
 
+    // 書き込みのトランザクションをこれから開始する状態に移行
     st->write_state = WRITE_STATE_TRANSITION;
 }
 
@@ -818,20 +847,34 @@ static SUB_STATE_RETURN write_state_machine(SSL_CONNECTION *s)
 
     cb = get_callback(s);
 
-    if (s->server) {
+    // serverかclientでst->write_stateの状態によって呼ばれるコールバック関数が設定される
+    if (s->server) {  // サーバの場合
         transition = ossl_statem_server_write_transition;
         pre_work = ossl_statem_server_pre_work;
         post_work = ossl_statem_server_post_work;
         get_construct_message_f = ossl_statem_server_construct_message;
-    } else {
+    } else {  // クライアントの場合
         transition = ossl_statem_client_write_transition;
         pre_work = ossl_statem_client_pre_work;
         post_work = ossl_statem_client_post_work;
         get_construct_message_f = ossl_statem_client_construct_message;
     }
 
+    // Iterate処理を行う
     while (1) {
+
+        /*
+         * st->write_stateによって分岐する。具体的には下記のcaseとなる。
+         *   - WRITE_STATE_TRANSITION  // 書き込みのトランザクションをこれから開始する状態
+         *   - WRITE_STATE_PRE_WORK    // 書き込みの事前(PRE)処理
+         *   - WRITE_STATE_SEND        // 書き込みの送信処理(メイン処理)
+         *   - WRITE_STATE_POST_WORK   // 書き込みの事後(POST)処理
+         *   - default
+         *
+         */
         switch (st->write_state) {
+
+ 
         case WRITE_STATE_TRANSITION:
             if (cb != NULL) {
                 /* Notify callback of an impending state change */
@@ -921,6 +964,7 @@ static SUB_STATE_RETURN write_state_machine(SSL_CONNECTION *s)
             if (SSL_CONNECTION_IS_DTLS(s) && st->use_timer) {
                 dtls1_start_timer(s);
             }
+            // StateMachineへの書き込みを行う
             ret = statem_do_write(s);
             if (ret <= 0) {
                 return SUB_STATE_ERROR;

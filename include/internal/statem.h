@@ -67,10 +67,10 @@ typedef enum {
 
 /* Write states */
 typedef enum {
-    WRITE_STATE_TRANSITION,
-    WRITE_STATE_PRE_WORK,
-    WRITE_STATE_SEND,
-    WRITE_STATE_POST_WORK
+    WRITE_STATE_TRANSITION,   // 書き込みのトランザクションをこれから開始する状態
+    WRITE_STATE_PRE_WORK,     // 書き込みの事前(PRE)処理
+    WRITE_STATE_SEND,         // 書き込みの送信処理(メイン処理)
+    WRITE_STATE_POST_WORK     // 書き込みの事後(POST)処理
 } WRITE_STATE;
 
 typedef enum {

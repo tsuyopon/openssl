@@ -999,6 +999,7 @@ OSSL_DEPRECATEDIN_1_1_0 void SSL_set_debug(SSL *s, int debug);
 /*
  * The valid handshake states (one for each type message sent and one for each
  * type of message received). There are also two "special" states:
+ * 下記を押さえておく必要がある
  * TLS = TLS or DTLS state
  * DTLS = DTLS specific state
  * CR/SR = Client Read/Server Read
@@ -1009,10 +1010,10 @@ OSSL_DEPRECATEDIN_1_1_0 void SSL_set_debug(SSL *s, int debug);
  * TLS_ST_OK = A handshake has been successfully completed
  */
 typedef enum {
-    TLS_ST_BEFORE,
-    TLS_ST_OK,
-    DTLS_ST_CR_HELLO_VERIFY_REQUEST,
-    TLS_ST_CR_SRVR_HELLO,
+    TLS_ST_BEFORE,   // No handshake has been initiated yet (special states)
+    TLS_ST_OK,       // A handshake has been successfully completed pecial states)
+    DTLS_ST_CR_HELLO_VERIFY_REQUEST,  // DTLSではHello Retry Requestメッセージがある
+    TLS_ST_CR_SRVR_HELLO,  //
     TLS_ST_CR_CERT,
     TLS_ST_CR_COMP_CERT,
     TLS_ST_CR_CERT_STATUS,

@@ -1905,6 +1905,7 @@ MSG_PROCESS_RETURN tls_process_server_rpk(SSL_CONNECTION *sc, PACKET *pkt)
     return MSG_PROCESS_CONTINUE_PROCESSING;
 }
 
+// RawPublicKeyに関する処理
 static WORK_STATE tls_post_process_server_rpk(SSL_CONNECTION *sc,
                                               WORK_STATE wst)
 {
@@ -1922,7 +1923,11 @@ static WORK_STATE tls_post_process_server_rpk(SSL_CONNECTION *sc,
         sc->rwstate = SSL_NOTHING;
 
     ERR_set_mark();
+
+    // RawPublicKeyの認証を行います(内部ではDANEの利用か、ローカル設定による認証をチェックします)
     v_ok = ssl_verify_rpk(sc, sc->session->peer_rpk);
+
+    // 正常に検証できない、かつ、SSL_VERIFY_NONE(証明書検証を無視)でなければ、ハンドシェイクをエラーにします
     if (v_ok <= 0 && sc->verify_mode != SSL_VERIFY_NONE) {
         ERR_clear_last_mark();
         SSLfatal(sc, ssl_x509err2alert(sc->verify_result),
@@ -2077,6 +2082,8 @@ WORK_STATE tls_post_process_server_certificate(SSL_CONNECTION *s,
     size_t certidx;
     int i;
 
+
+    // Serverから送付されてきたcertificate_type拡張でRawPublicKeyが指定された場合 (X.509かRPKが指定される)
     if (s->ext.server_cert_type == TLSEXT_cert_type_rpk)
         return tls_post_process_server_rpk(s, wst);
 
