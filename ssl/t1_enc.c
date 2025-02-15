@@ -112,6 +112,7 @@ static int tls_iv_length_within_key_block(const EVP_CIPHER *c)
         return EVP_CIPHER_get_iv_length(c);
 }
 
+// この関数はTLS v1.0, v1.1, v1.2の際に呼ばれる。TLS v1.3は別関数が呼ばれる
 int tls1_change_cipher_state(SSL_CONNECTION *s, int which)
 {
     unsigned char *p, *mac_secret;
@@ -172,10 +173,10 @@ int tls1_change_cipher_state(SSL_CONNECTION *s, int which)
     }
 
     switch (EVP_CIPHER_get_mode(c)) {
-    case EVP_CIPH_GCM_MODE:
+    case EVP_CIPH_GCM_MODE:  // GCM
         taglen = EVP_GCM_TLS_TAG_LEN;
         break;
-    case EVP_CIPH_CCM_MODE:
+    case EVP_CIPH_CCM_MODE:  // CCM
         if ((s->s3.tmp.new_cipher->algorithm_enc
                 & (SSL_AES128CCM8 | SSL_AES256CCM8)) != 0)
             taglen = EVP_CCM8_TLS_TAG_LEN;
@@ -193,6 +194,7 @@ int tls1_change_cipher_state(SSL_CONNECTION *s, int which)
     }
 
     if (which & SSL3_CC_READ) {
+        // EncryptThenMac拡張
         if (s->ext.use_etm)
             s->s3.flags |= TLS1_FLAGS_ENCRYPT_THEN_MAC_READ;
         else

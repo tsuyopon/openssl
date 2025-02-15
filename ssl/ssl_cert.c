@@ -455,7 +455,9 @@ static int ssl_verify_internal(SSL_CONNECTION *s, STACK_OF(X509) *sk, EVP_PKEY *
             goto end;
         }
     }
+
     param = X509_STORE_CTX_get0_param(ctx);
+
     /*
      * XXX: Separate @AUTHSECLEVEL and @TLSSECLEVEL would be useful at some
      * point, for now a single @SECLEVEL sets the same policy for TLS crypto
@@ -482,6 +484,7 @@ static int ssl_verify_internal(SSL_CONNECTION *s, STACK_OF(X509) *sk, EVP_PKEY *
      */
 
     X509_STORE_CTX_set_default(ctx, s->server ? "ssl_client" : "ssl_server");
+
     /*
      * Anything non-default in "s->param" should overwrite anything in the ctx.
      */
@@ -490,7 +493,9 @@ static int ssl_verify_internal(SSL_CONNECTION *s, STACK_OF(X509) *sk, EVP_PKEY *
     if (s->verify_callback)
         X509_STORE_CTX_set_verify_cb(ctx, s->verify_callback);
 
+    // app_verify_callbackは、SSL_CTX_set_cert_verify_callbackによってセットされるコールバック
     if (sctx->app_verify_callback != NULL) {
+        // コールバックがセットされていれば、コールバック処理を実行する
         i = sctx->app_verify_callback(ctx, sctx->app_verify_arg);
     } else {
         i = X509_verify_cert(ctx);

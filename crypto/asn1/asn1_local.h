@@ -12,6 +12,8 @@
 #include "crypto/asn1.h"
 
 typedef const ASN1_VALUE const_ASN1_VALUE;
+
+// include/openssl/safestack.h.in の中で下記SKM_DEFINE_STACK_OFはdefine定義されていて、展開される
 SKM_DEFINE_STACK_OF(const_ASN1_VALUE, const ASN1_VALUE, ASN1_VALUE)
 
 int ossl_asn1_time_to_tm(struct tm *tm, const ASN1_TIME *d);

@@ -30,21 +30,23 @@
 static const SIGALG_LOOKUP *find_sig_alg(SSL_CONNECTION *s, X509 *x, EVP_PKEY *pkey);
 static int tls12_sigalg_allowed(const SSL_CONNECTION *s, int op, const SIGALG_LOOKUP *lu);
 
+// TLS v1.0の関数ポインタが定義された構造体
 SSL3_ENC_METHOD const TLSv1_enc_data = {
-    tls1_setup_key_block,
-    tls1_generate_master_secret,
-    tls1_change_cipher_state,
-    tls1_final_finish_mac,
+    tls1_setup_key_block,          // (*setup_key_block)
+    tls1_generate_master_secret,   // (*generate_master_secret)
+    tls1_change_cipher_state,      // (*change_cipher_state)
+    tls1_final_finish_mac,         // (*final_finish_mac)
     TLS_MD_CLIENT_FINISH_CONST, TLS_MD_CLIENT_FINISH_CONST_SIZE,
     TLS_MD_SERVER_FINISH_CONST, TLS_MD_SERVER_FINISH_CONST_SIZE,
-    tls1_alert_code,
-    tls1_export_keying_material,
-    0,
-    ssl3_set_handshake_header,
-    tls_close_construct_packet,
-    ssl3_handshake_write
+    tls1_alert_code,               // (*alert_value)
+    tls1_export_keying_material,   // (*export_keying_material)
+    0,                             // enc_flags
+    ssl3_set_handshake_header,     // (*set_handshake_header)
+    tls_close_construct_packet,    // (*close_construct_packet)
+    ssl3_handshake_write           // (*do_write)
 };
 
+// TLS v1.1の関数ポインタが定義された構造体
 SSL3_ENC_METHOD const TLSv1_1_enc_data = {
     tls1_setup_key_block,
     tls1_generate_master_secret,
@@ -60,6 +62,7 @@ SSL3_ENC_METHOD const TLSv1_1_enc_data = {
     ssl3_handshake_write
 };
 
+// TLS v1.2の関数ポインタが定義された構造体
 SSL3_ENC_METHOD const TLSv1_2_enc_data = {
     tls1_setup_key_block,
     tls1_generate_master_secret,
@@ -76,6 +79,7 @@ SSL3_ENC_METHOD const TLSv1_2_enc_data = {
     ssl3_handshake_write
 };
 
+// TLS v1.3の関数ポインタが定義された構造体
 SSL3_ENC_METHOD const TLSv1_3_enc_data = {
     tls13_setup_key_block,
     tls13_generate_master_secret,

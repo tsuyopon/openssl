@@ -290,6 +290,8 @@ int X509_verify_cert(X509_STORE_CTX *ctx)
         ERR_raise(ERR_LIB_X509, ERR_R_PASSED_NULL_PARAMETER);
         return -1;
     }
+
+    // RawPublicKeyオブジェクトが空でなければ、RawPublicKeyによる検証を行い、それ以外ならX>509による検証を行う
     return (ctx->rpk != NULL) ? x509_verify_rpk(ctx) : x509_verify_x509(ctx);
 }
 
@@ -2264,6 +2266,7 @@ STACK_OF(X509) *X509_STORE_CTX_get0_chain(const X509_STORE_CTX *ctx)
     return ctx->chain;
 }
 
+// 險ｼ譏取嶌繝√ぉ繝ｼ繝ｳ縺ｮ讀懆ｨｼ繧定｡後≧
 STACK_OF(X509) *X509_STORE_CTX_get1_chain(const X509_STORE_CTX *ctx)
 {
     if (ctx->chain == NULL)

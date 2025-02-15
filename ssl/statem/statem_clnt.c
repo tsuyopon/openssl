@@ -1076,6 +1076,7 @@ size_t ossl_statem_client_max_message_size(SSL_CONNECTION *s)
 /*
  * Process a message that the client has received from the server.
  */
+// TLSクライアントがTLSサーバから受信したメッセージを取り扱う際のstate machine関数です
 MSG_PROCESS_RETURN ossl_statem_client_process_message(SSL_CONNECTION *s,
                                                       PACKET *pkt)
 {
@@ -1087,12 +1088,15 @@ MSG_PROCESS_RETURN ossl_statem_client_process_message(SSL_CONNECTION *s,
         SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
         return MSG_PROCESS_ERROR;
 
+    // ServerHelloを受信
     case TLS_ST_CR_SRVR_HELLO:
         return tls_process_server_hello(s, pkt);
 
+    // HelloVerifyRequestを受信 (DTLS専用)
     case DTLS_ST_CR_HELLO_VERIFY_REQUEST:
         return dtls_process_hello_verify(s, pkt);
 
+    // Certificateを受信
     case TLS_ST_CR_CERT:
         return tls_process_server_certificate(s, pkt);
 
@@ -1101,6 +1105,7 @@ MSG_PROCESS_RETURN ossl_statem_client_process_message(SSL_CONNECTION *s,
         return tls_process_server_compressed_certificate(s, pkt);
 #endif
 
+    // CertificateVerifyを受信
     case TLS_ST_CR_CERT_VRFY:
         return tls_process_cert_verify(s, pkt);
 
@@ -1210,6 +1215,8 @@ CON_FUNC_RETURN tls_construct_client_hello(SSL_CONNECTION *s, WPACKET *pkt)
         i = (s->hello_retry_request == SSL_HRR_NONE);
     }
 
+    // RFC8446のlegacy_session_idによる下記の規定によりrandom byteを用意する
+    //   so a client not offering a pre-TLS 1.3 session MUST generate a new 32-byte value
     if (i && ssl_fill_hello_random(s, 0, p, sizeof(s->s3.client_random),
                                    DOWNGRADE_NONE) <= 0) {
         SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
@@ -1257,7 +1264,11 @@ CON_FUNC_RETURN tls_construct_client_hello(SSL_CONNECTION *s, WPACKET *pkt)
 
     /* Session ID */
     session_id = s->session->session_id;
-    if (s->new_session || s->session->ssl_version == TLS1_3_VERSION) {
+
+    if (s->new_session || s->session->ssl_version == TLS1_3_VERSION) { // 新しいセッション、または、TLSバージョンがv1.3の場合
+
+        // TLS1.3 かつSSL_OP_ENABLE_MIDDLEBOX_COMPATがセットされている場合
+        // SSL_OP_ENABLE_MIDDLEBOX_COMPATは、TLS1.3で不要となっているChange Cipher Specの送信を行う(NW機器などのミドルボックスで通信遮断されないための対応)
         if (s->version == TLS1_3_VERSION
                 && (s->options & SSL_OP_ENABLE_MIDDLEBOX_COMPAT) != 0) {
             sess_id_len = sizeof(s->tmp_session_id);
@@ -1272,7 +1283,7 @@ CON_FUNC_RETURN tls_construct_client_hello(SSL_CONNECTION *s, WPACKET *pkt)
         } else {
             sess_id_len = 0;
         }
-    } else {
+    } else { // TLS1.3以外のTLSバージョンの再利用セッションの場合
         assert(s->session->session_id_length <= sizeof(s->session->session_id));
         sess_id_len = s->session->session_id_length;
         if (s->version == TLS1_3_VERSION) {
@@ -1280,6 +1291,7 @@ CON_FUNC_RETURN tls_construct_client_hello(SSL_CONNECTION *s, WPACKET *pkt)
             memcpy(s->tmp_session_id, s->session->session_id, sess_id_len);
         }
     }
+
     if (!WPACKET_start_sub_packet_u8(pkt)
             || (sess_id_len != 0 && !WPACKET_memcpy(pkt, session_id,
                                                     sess_id_len))
@@ -1289,6 +1301,7 @@ CON_FUNC_RETURN tls_construct_client_hello(SSL_CONNECTION *s, WPACKET *pkt)
     }
 
     /* cookie stuff for DTLS */
+    // DTLS(RFC9147)では、ClinetHelloのlegacy_session_idとcipher_suitesの間に、legacy_cookieが入ります。
     if (SSL_CONNECTION_IS_DTLS(s)) {
         if (s->d1->cookie_len > sizeof(s->d1->cookie)
                 || !WPACKET_sub_memcpy_u8(pkt, s->d1->cookie,
@@ -1299,16 +1312,19 @@ CON_FUNC_RETURN tls_construct_client_hello(SSL_CONNECTION *s, WPACKET *pkt)
     }
 
     /* Ciphers supported */
+    // ClientHello: cipher_suites用パケットの確保 (下記からWPACKET_closeまでがこの処理のセット)
     if (!WPACKET_start_sub_packet_u16(pkt)) {
         SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
         return CON_FUNC_ERROR;
     }
 
+    // pktにサポートするcipherのlistを追加する
     if (!ssl_cipher_list_to_bytes(s, SSL_get_ciphers(SSL_CONNECTION_GET_SSL(s)),
                                   pkt)) {
         /* SSLfatal() already called */
         return CON_FUNC_ERROR;
     }
+
     if (!WPACKET_close(pkt)) {
         SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
         return CON_FUNC_ERROR;
@@ -1319,7 +1335,10 @@ CON_FUNC_RETURN tls_construct_client_hello(SSL_CONNECTION *s, WPACKET *pkt)
         SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
         return CON_FUNC_ERROR;
     }
+
+// 圧縮ありの場合
 #ifndef OPENSSL_NO_COMP
+    // 圧縮アルゴリズムのリストを含める
     if (ssl_allow_compression(s)
             && sctx->comp_methods
             && (SSL_CONNECTION_IS_DTLS(s)
@@ -1334,6 +1353,7 @@ CON_FUNC_RETURN tls_construct_client_hello(SSL_CONNECTION *s, WPACKET *pkt)
         }
     }
 #endif
+
     /* Add the NULL method */
     if (!WPACKET_put_bytes_u8(pkt, 0) || !WPACKET_close(pkt)) {
         SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
@@ -1341,6 +1361,7 @@ CON_FUNC_RETURN tls_construct_client_hello(SSL_CONNECTION *s, WPACKET *pkt)
     }
 
     /* TLS extensions */
+    // ClientHelloに追加する拡張を構築する
     if (!tls_construct_extensions(s, pkt, SSL_EXT_CLIENT_HELLO, NULL, 0)) {
         /* SSLfatal() already called */
         return CON_FUNC_ERROR;
@@ -1349,6 +1370,7 @@ CON_FUNC_RETURN tls_construct_client_hello(SSL_CONNECTION *s, WPACKET *pkt)
     return CON_FUNC_SUCCESS;
 }
 
+// DTLSではClientHelloの後に、Hello Verify Requestというメッセージで相手を再確認する仕組みがあります。
 MSG_PROCESS_RETURN dtls_process_hello_verify(SSL_CONNECTION *s, PACKET *pkt)
 {
     size_t cookie_len;
@@ -1935,6 +1957,8 @@ static WORK_STATE tls_post_process_server_rpk(SSL_CONNECTION *sc,
         return WORK_ERROR;
     }
     ERR_pop_to_mark();      /* but we keep s->verify_result */
+
+    // 検証が正常で、かつ、SSL_VERIFY_NONE(証明書検証)であれば、WORK_MORE_Aをreturnする
     if (v_ok > 0 && sc->rwstate == SSL_RETRY_VERIFY) {
         return WORK_MORE_A;
     }
@@ -2083,7 +2107,7 @@ WORK_STATE tls_post_process_server_certificate(SSL_CONNECTION *s,
     int i;
 
 
-    // Serverから送付されてきたcertificate_type拡張でRawPublicKeyが指定された場合 (X.509かRPKが指定される)
+    // Serverから送付されてきたcertificate_type拡張において、RawPublicKeyが指定された場合 (X.509かRPKが指定される)
     if (s->ext.server_cert_type == TLSEXT_cert_type_rpk)
         return tls_post_process_server_rpk(s, wst);
 

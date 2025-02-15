@@ -363,6 +363,7 @@ int WPACKET_finish(WPACKET *pkt)
     return ret;
 }
 
+// 指定されたパケット領域の確保
 int WPACKET_start_sub_packet_len__(WPACKET *pkt, size_t lenbytes)
 {
     WPACKET_SUB *sub;

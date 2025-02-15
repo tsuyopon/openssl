@@ -885,6 +885,7 @@ int tls_construct_extensions(SSL_CONNECTION *s, WPACKET *pkt,
         /* On the server side with initialise during ClientHello parsing */
         custom_ext_init(&s->cert->custext);
     }
+
     if (!custom_ext_add(s, context, pkt, x, chainidx, max_version)) {
         /* SSLfatal() already called */
         return 0;

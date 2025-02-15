@@ -64,6 +64,7 @@ extern "C" {
         return (OPENSSL_sk_freefunc)fr; \
     }
 
+// 「sk_」で定義される変数は下記
 # define SKM_DEFINE_STACK_OF(t1, t2, t3) \
     STACK_OF(t1); \
     typedef int (*sk_##t1##_compfunc)(const t3 * const *a, const t3 *const *b); \
